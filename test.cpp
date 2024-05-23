@@ -1,5 +1,7 @@
 #include "mconn.h"
-#include <stdio.h>
+#include <cstdio>
+#include <unistd.h>
+#include <cstring>
 
 class my_handler : public handler
 {
@@ -42,11 +44,11 @@ class my_handler : public handler
 #if 1
 int main()
 {
-    char ip[16] = "192.168.1.150";
+    char ip[16] = "127.0.0.1";
     int port = 3306;
-    char user[256] = "ec";
-    char passwd[256] = "ecEC!)@(#*$*";
-    char dbname[256] = "test";
+    char user[256] = "root";
+    char passwd[256] = "Huawei@123";
+    char dbname[256] = "mysql";
 
     struct ev_loop *loop = EV_DEFAULT;
     mconn conn1;

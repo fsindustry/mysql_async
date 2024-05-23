@@ -1,6 +1,7 @@
 
 #include "mconn.h"
 #include <stdio.h>
+#include <cstring>
 
 void libev_cb(struct ev_loop *loop, ev_io *watcher, int event)
 {
