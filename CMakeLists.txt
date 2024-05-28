@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 
 # 项目名称
-project(TestProject)
+project(GtidSyner)
 
 # 设置编译器
 set(CMAKE_C_COMPILER gcc)
@@ -20,7 +20,16 @@ set(LIBS mariadbclient ev ssl crypto dl z pthread)
 # set (CMAKE_CXX_LINK_EXECUTABLE "${CMAKE_CXX_LINK_EXECUTABLE} -ldl")
 
 # 源文件
-set(SOURCES mconn.cpp test.cpp mconn.h)
+set(SOURCES mconn.cpp test.cpp mconn.h
+        gtid_syner/Gtid_MySQL_Result.cpp
+        gtid_syner/Gtid_MySQL_Result.h
+        gtid_syner/Gtid_MySQL_Conn.h
+        gtid_syner/Gtid_MySQL_Conn.cpp
+        gtid_syner/Gtid_MySQL_Conn.h
+        gtid_syner/Gtid_MySQL_Conn.cpp
+        gtid_syner/Gtid_MySQL_Conn.h
+        gtid_syner/Gtid_MySQL_Conn_Mgr.cpp
+        gtid_syner/Gtid_MySQL_Conn_Mgr.h)
 
 # 添加可执行文件
 add_executable(test ${SOURCES})
