@@ -35,13 +35,17 @@ namespace gtid_syner {
     typedef struct db_info_s {
         int port = 0;
         int max_conn_cnt = 0;
-        std::string host, db_name, password, charset, user;
+        std::string host;
+        std::string user;
+        std::string password;
+        std::string db_name;
+        std::string charset;
     } db_info_t;
 
 
-    typedef void(mysql_exec_cb)(const Gtid_MySQL_Conn *, sql_task_t *task);
+    typedef void(*mysql_exec_cb)(const Gtid_MySQL_Conn *, sql_task_t *task);
 
-    typedef void(mysql_query_cb)(const Gtid_MySQL_Conn *, sql_task_t *task, Gtid_MySQL_Result *res);
+    typedef void(*mysql_query_cb)(const Gtid_MySQL_Conn *, sql_task_t *task, Gtid_MySQL_Result *res);
 
     typedef struct sql_task_s {
         enum class OPERATE {
@@ -50,8 +54,8 @@ namespace gtid_syner {
         };
         std::string sql;
         OPERATE oper = OPERATE::SELECT;
-        mysql_exec_cb *fn_exec = nullptr;
-        mysql_query_cb *fn_query = nullptr;
+        mysql_exec_cb fn_exec = nullptr;
+        mysql_query_cb fn_query = nullptr;
         void *privdata = nullptr;
         int error = 0;
         std::string errstr;
@@ -78,12 +82,13 @@ namespace gtid_syner {
 
         bool add_task(sql_task_t *task);
 
-        bool is_connected() { return m_is_connected; }
+        bool is_connected() const { return m_is_connected; }
 
     private:
         bool set_db_info(const db_info_t *db_info);
 
         void connect_failed();
+
         void connect_ok();
 
         /**--------------------- events handle --------------------------------**/
@@ -108,30 +113,35 @@ namespace gtid_syner {
         /**
          * state machine to handle mysql async api
          */
-        void mysql_state_machine(struct ev_loop *loop, ev_io *w, int event);
+        void state_machine_handler(struct ev_loop *loop, ev_io *w, int event);
 
         void active_ev_io(int mysql_status);
 
 
-        static int mysql_status_to_libev_event(int status);
+        static int event_status(int status);
 
-        static int libev_event_to_mysql_status(int event);
+        static int mysql_status(int event);
 
         /**--------------------- mysql async api --------------------------------**/
 
         void connect_start();
+
         void connect_wait(struct ev_loop *loop, ev_io *w, int event);
 
         void query_start();
+
         void query_wait(struct ev_loop *loop, ev_io *w, int event);
 
         void exec_start();
+
         void exec_wait(struct ev_loop *loop, ev_io *w, int event);
 
         void store_result_start();
+
         void store_result_wait(struct ev_loop *loop, ev_io *w, int event);
 
         void ping_start();
+
         void ping_wait(struct ev_loop *loop, ev_io *w, int event);
 
         /**--------------------- sql task api --------------------------------**/
@@ -158,6 +168,10 @@ namespace gtid_syner {
         bool m_reading = false;
         bool m_writing = false;
         struct ev_loop *m_loop = nullptr;
+    public:
+        struct ev_loop *get_loop() const;
+
+    private:
 
         bool m_is_connected = true;
         int m_reconnect_cnt = 0;

@@ -99,13 +99,39 @@ namespace gtid_syner {
      */
     void Gtid_MySQL_Conn::libev_io_cb(struct ev_loop *loop, ev_io *w, int event) {
         Gtid_MySQL_Conn *c = static_cast<Gtid_MySQL_Conn *>(w->data);
-        c->mysql_state_machine(loop, w, event);
+        c->state_machine_handler(loop, w, event);
     }
 
     /**
      * state machine to handle mysql async api
      */
-    void Gtid_MySQL_Conn::mysql_state_machine(struct ev_loop *loop, ev_io *w, int event) {
+//    void Gtid_MySQL_Conn::state_machine_handler(struct ev_loop *loop, ev_io *w, int event) {
+//        switch (m_state) {
+//            case STATE::CONNECT_WAITING:
+//                connect_wait(loop, w, event);
+//                break;
+//            case STATE::WAIT_TASK:
+//                start_next_task();
+//                break;
+//            case STATE::QUERY_WAITING:
+//                query_wait(loop, w, event);
+//                break;
+//            case STATE::EXECSQL_WAITING:
+//                exec_wait(loop, w, event);
+//                break;
+//            case STATE::STORE_WAITING:
+//                store_result_wait(loop, w, event);
+//                break;
+//            case STATE::PING_WAITING:
+//                ping_wait(loop, w, event);
+//                break;
+//            default:
+//                // todo error log
+//                break;
+//        }
+//    }
+
+    void Gtid_MySQL_Conn::state_machine_handler(struct ev_loop *loop, ev_io *w, int event) {
         switch (m_state) {
             case STATE::CONNECT_WAITING:
                 connect_wait(loop, w, event);
@@ -130,6 +156,7 @@ namespace gtid_syner {
                 break;
         }
     }
+
 
     void Gtid_MySQL_Conn::connect_start() {
         MYSQL *ret = nullptr;
@@ -158,7 +185,7 @@ namespace gtid_syner {
 
     void Gtid_MySQL_Conn::connect_wait(struct ev_loop *loop, ev_io *watcher, int event) {
         MYSQL *ret = nullptr;
-        int status = libev_event_to_mysql_status(event);
+        int status = mysql_status(event);
         status = mysql_real_connect_cont(&ret, &m_mysql, status);
         if (status != OPERATION_FINISHED) {
             // LT mode. it will callback again
@@ -199,7 +226,7 @@ namespace gtid_syner {
 
     void Gtid_MySQL_Conn::query_wait(struct ev_loop *loop, ev_io *w, int event) {
         int ret, status;
-        status = libev_event_to_mysql_status(event);
+        status = mysql_status(event);
         status = mysql_real_query_cont(&ret, &m_mysql, status);
 
         if (status != OPERATION_FINISHED) {
@@ -237,7 +264,7 @@ namespace gtid_syner {
         }
 
         int ret = 0;
-        int status = libev_event_to_mysql_status(event);
+        int status = mysql_status(event);
         status = mysql_real_query_cont(&ret, &m_mysql, status);
         if (status != OPERATION_FINISHED) {
             // LT mode. it will callback again
@@ -261,7 +288,7 @@ namespace gtid_syner {
         if (m_cur_task == nullptr) {
             return;
         }
-        int status = libev_event_to_mysql_status(event);
+        int status = mysql_status(event);
         status = mysql_store_result_cont(&m_query_res, &m_mysql, status);
         if (status != OPERATION_FINISHED) {
             // LT mode. it will callback again
@@ -294,7 +321,7 @@ namespace gtid_syner {
 
     void Gtid_MySQL_Conn::ping_wait(struct ev_loop *loop, ev_io *w, int event) {
         int ret = 0;
-        int status = libev_event_to_mysql_status(event);
+        int status = mysql_status(event);
         status = mysql_ping_cont(&ret, &m_mysql, status);
         if (status != OPERATION_FINISHED) {
             // LT mode. it will callback again
@@ -316,7 +343,7 @@ namespace gtid_syner {
     void Gtid_MySQL_Conn::active_ev_io(int mysql_status) {
         bool old_read = m_reading;
         bool old_wrie = m_writing;
-        int events = mysql_status_to_libev_event(mysql_status);
+        int events = event_status(mysql_status);
 
         if (events & EV_READ) { // read event
             if (!m_reading) {
@@ -343,7 +370,7 @@ namespace gtid_syner {
         }
     }
 
-    int Gtid_MySQL_Conn::mysql_status_to_libev_event(int status) {
+    int Gtid_MySQL_Conn::event_status(int status) {
         int events = 0;
         if (status & MYSQL_WAIT_READ) {
             events |= EV_READ;
@@ -354,13 +381,16 @@ namespace gtid_syner {
         return events;
     }
 
-    int Gtid_MySQL_Conn::libev_event_to_mysql_status(int event) {
+    int Gtid_MySQL_Conn::mysql_status(int event) {
         int status = 0;
         if (event & EV_READ) {
             status |= MYSQL_WAIT_READ;
         }
         if (event & EV_WRITE) {
             status |= MYSQL_WAIT_WRITE;
+        }
+        if (event & EV_TIMEOUT) {
+            status |= MYSQL_WAIT_TIMEOUT;
         }
         return status;
     }
@@ -480,5 +510,9 @@ namespace gtid_syner {
             task->fn_exec(this, task);
             task->fn_exec = nullptr;
         }
+    }
+
+    struct ev_loop *Gtid_MySQL_Conn::get_loop() const {
+        return m_loop;
     }
 } // gtid_syner
