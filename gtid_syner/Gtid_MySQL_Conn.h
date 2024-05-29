@@ -65,13 +65,17 @@ namespace gtid_syner {
 
     public:
         enum class STATE {
-            NO_CONNECTED = 0,
-            CONNECT_WAITING,
-            WAIT_TASK,
-            QUERY_WAITING,
-            EXECSQL_WAITING,
-            STORE_WAITING,
-            PING_WAITING
+            CONNECT_START = 0,
+            CONNECT_CONT = 1,
+            CONNECT_END = 9,
+            QUERY_START = 10,
+            QUERY_CONT = 11,
+            STORE_RESULT_START = 30,
+            STORE_RESULT_CONT = 31,
+            STORE_RESULT_END = 39,
+            PING_START,
+            PING_CONT,
+            PING_END
         };
 
         Gtid_MySQL_Conn();
@@ -101,12 +105,12 @@ namespace gtid_syner {
         bool load_timer();
 
         /**
-         * ping timer callback
+         * ping timer handle_callback
          */
         static void ping_timer_cb(struct ev_loop *loop, ev_timer *w, int revents);
 
         /**
-         * io callback
+         * io handle_callback
          */
         static void libev_io_cb(struct ev_loop *loop, ev_io *w, int event);
 
@@ -115,7 +119,7 @@ namespace gtid_syner {
          */
         void state_machine_handler(struct ev_loop *loop, ev_io *w, int event);
 
-        void active_ev_io(int mysql_status);
+        void next_event(int mysql_status);
 
 
         static int event_status(int status);
@@ -124,30 +128,34 @@ namespace gtid_syner {
 
         /**--------------------- mysql async api --------------------------------**/
 
-        void connect_start();
+        bool connect_start();
 
-        void connect_wait(struct ev_loop *loop, ev_io *w, int event);
+        bool connect_cont(struct ev_loop *loop, ev_io *watcher, int event);
 
-        void query_start();
+        bool connect_end();
 
-        void query_wait(struct ev_loop *loop, ev_io *w, int event);
+        bool query_start();
 
-        void exec_start();
+        bool query_cont(struct ev_loop *loop, ev_io *w, int event);
+
+        bool exec_start();
 
         void exec_wait(struct ev_loop *loop, ev_io *w, int event);
 
-        void store_result_start();
+        bool store_result_start();
 
-        void store_result_wait(struct ev_loop *loop, ev_io *w, int event);
+        bool store_result_cont(struct ev_loop *loop, ev_io *watcher, int event);
 
-        void ping_start();
+        bool store_result_end();
 
-        void ping_wait(struct ev_loop *loop, ev_io *w, int event);
+        bool ping_start();
+
+        bool ping_cont(struct ev_loop *loop, ev_io *w, int event);
+
+        bool ping_end();
 
         /**--------------------- sql task api --------------------------------**/
         bool is_task_empty() { return (m_tasks.empty() && m_cur_task == nullptr); }
-
-        void start_next_task();
 
         sql_task_t *fetch_next_task();
 
@@ -157,9 +165,9 @@ namespace gtid_syner {
 
         void clear_tasks();
 
-        void handle_task_callback();
+        bool handle_error();
 
-        void callback(sql_task_t *task);
+        void handle_callback(sql_task_t *task);
 
     private:
 
@@ -179,7 +187,9 @@ namespace gtid_syner {
 
         MYSQL m_mysql;
         MYSQL_RES *m_query_res = nullptr;
-        STATE m_state = STATE::NO_CONNECTED;
+        MYSQL *ret;
+        int err;
+        STATE m_state = STATE::CONNECT_START;
         Gtid_MySQL_Result m_mysql_result;
 
         std::list<sql_task_t *> m_tasks;

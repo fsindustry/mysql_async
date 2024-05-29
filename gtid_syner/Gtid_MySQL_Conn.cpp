@@ -66,7 +66,6 @@ namespace gtid_syner {
     void Gtid_MySQL_Conn::connect_failed() {
         m_is_connected = false;
         stop_task();
-        set_state(STATE::NO_CONNECTED);
     }
 
     /**--------------------- events handle --------------------------------**/
@@ -87,7 +86,7 @@ namespace gtid_syner {
     }
 
     /**
-     * ping timer callback
+     * ping timer handle_callback
      */
     void Gtid_MySQL_Conn::ping_timer_cb(struct ev_loop *loop, ev_timer *w, int revents) {
         Gtid_MySQL_Conn *c = static_cast<Gtid_MySQL_Conn *>(w->data);
@@ -95,7 +94,7 @@ namespace gtid_syner {
     }
 
     /**
-     * io callback
+     * io handle_callback
      */
     void Gtid_MySQL_Conn::libev_io_cb(struct ev_loop *loop, ev_io *w, int event) {
         Gtid_MySQL_Conn *c = static_cast<Gtid_MySQL_Conn *>(w->data);
@@ -105,51 +104,63 @@ namespace gtid_syner {
     /**
      * state machine to handle mysql async api
      */
-//    void Gtid_MySQL_Conn::state_machine_handler(struct ev_loop *loop, ev_io *w, int event) {
-//        switch (m_state) {
-//            case STATE::CONNECT_WAITING:
-//                connect_wait(loop, w, event);
-//                break;
-//            case STATE::WAIT_TASK:
-//                start_next_task();
-//                break;
-//            case STATE::QUERY_WAITING:
-//                query_wait(loop, w, event);
-//                break;
-//            case STATE::EXECSQL_WAITING:
-//                exec_wait(loop, w, event);
-//                break;
-//            case STATE::STORE_WAITING:
-//                store_result_wait(loop, w, event);
-//                break;
-//            case STATE::PING_WAITING:
-//                ping_wait(loop, w, event);
-//                break;
-//            default:
-//                // todo error log
-//                break;
-//        }
-//    }
-
     void Gtid_MySQL_Conn::state_machine_handler(struct ev_loop *loop, ev_io *w, int event) {
+        again: // quick start next loop
         switch (m_state) {
-            case STATE::CONNECT_WAITING:
-                connect_wait(loop, w, event);
+            case STATE::CONNECT_START:
+                if (connect_start()) {
+                    goto again;
+                }
                 break;
-            case STATE::WAIT_TASK:
-                start_next_task();
+            case STATE::CONNECT_CONT:
+                if (connect_cont(loop, w, event)) {
+                    goto again;
+                }
                 break;
-            case STATE::QUERY_WAITING:
-                query_wait(loop, w, event);
+            case STATE::CONNECT_END:
+                if (connect_end()) {
+                    goto again;
+                }
                 break;
-            case STATE::EXECSQL_WAITING:
-                exec_wait(loop, w, event);
+            case STATE::QUERY_START:
+                if (query_start()) {
+                    goto again;
+                }
                 break;
-            case STATE::STORE_WAITING:
-                store_result_wait(loop, w, event);
+            case STATE::QUERY_CONT:
+                if (query_cont(loop, w, event)) {
+                    goto again;
+                }
                 break;
-            case STATE::PING_WAITING:
-                ping_wait(loop, w, event);
+            case STATE::STORE_RESULT_START:
+                if (store_result_start()) {
+                    goto again;
+                }
+                break;
+            case STATE::STORE_RESULT_CONT:
+                if (store_result_cont(loop, w, event)) {
+                    goto again;
+                }
+                break;
+            case STATE::STORE_RESULT_END:
+                if (store_result_end()) {
+                    goto again;
+                }
+                break;
+            case STATE::PING_START:
+                if (ping_start()) {
+                    goto again;
+                }
+                break;
+            case STATE::PING_CONT:
+                if (ping_cont(loop, w, event)) {
+                    goto again;
+                }
+                break;
+            case STATE::PING_END:
+                if (ping_end()) {
+                    goto again;
+                }
                 break;
             default:
                 // todo error log
@@ -157,192 +168,167 @@ namespace gtid_syner {
         }
     }
 
-
-    void Gtid_MySQL_Conn::connect_start() {
-        MYSQL *ret = nullptr;
+    bool Gtid_MySQL_Conn::connect_start() {
         int status = mysql_real_connect_start(&ret, &m_mysql,
                                               m_db_info->host.c_str(),
                                               m_db_info->user.c_str(),
                                               m_db_info->password.c_str(),
                                               m_db_info->db_name.c_str(),
                                               m_db_info->port, NULL, 0);
-
         if (status != OPERATION_FINISHED) {
-            set_state(STATE::CONNECT_WAITING);
-            active_ev_io(status);
-            return;
+            set_state(STATE::CONNECT_CONT);
+            next_event(status);
+            return false;
         } else {
-            if (ret != nullptr) { // success
-                connect_ok();
-                mysql_set_character_set(&m_mysql, m_db_info->charset.c_str()); /* mysql 5.0 lib */
-                set_state(STATE::WAIT_TASK);
-            } else { // error
-                // todo error log
-                connect_failed();
-            }
+            set_state(STATE::CONNECT_END);
+            return true;
         }
     }
 
-    void Gtid_MySQL_Conn::connect_wait(struct ev_loop *loop, ev_io *watcher, int event) {
-        MYSQL *ret = nullptr;
+    bool Gtid_MySQL_Conn::connect_cont(struct ev_loop *loop, ev_io *watcher, int event) {
         int status = mysql_status(event);
         status = mysql_real_connect_cont(&ret, &m_mysql, status);
         if (status != OPERATION_FINISHED) {
-            // LT mode. it will callback again
+            set_state(STATE::CONNECT_CONT);
+            next_event(status);
+            return false;
         } else {
-            if (ret != nullptr) { // connect succeed
-                // todo info log
-                connect_ok();
-                mysql_set_character_set(&m_mysql, m_db_info->charset.c_str()); /* mysql 5.0 lib */
-                set_state(STATE::WAIT_TASK);
-                wait_next_task();
-            } else { // connect failed
-                // todo error log
-                connect_failed();
-            }
+            set_state(STATE::CONNECT_END);
+            // todo handle ret
+            return true;
         }
     }
 
-    void Gtid_MySQL_Conn::query_start() {
+    bool Gtid_MySQL_Conn::connect_end() {
+        if (ret != nullptr) { // success
+            connect_ok();
+            mysql_set_character_set(&m_mysql, m_db_info->charset.c_str()); /* mysql 5.0 lib */
+            set_state(STATE::QUERY_START);
+            return true;
+        } else { // error
+            // todo error log
+            connect_failed();
+            return false;
+        }
+    }
+
+    bool Gtid_MySQL_Conn::query_start() {
+
+        SAFE_DELETE(m_cur_task);
+        m_cur_task = fetch_next_task();
         if (m_cur_task == nullptr) {
-            return;
+            stop_task();
+            return false;
         }
 
-        int ret = 0;
-        int status = mysql_real_query_start(&ret, &m_mysql, m_cur_task->sql.c_str(), m_cur_task->sql.size());
+        int status = mysql_real_query_start(&err, &m_mysql, m_cur_task->sql.c_str(), m_cur_task->sql.size());
         if (status != OPERATION_FINISHED) {
-            // LT mode. it will callback again
-            set_state(STATE::QUERY_WAITING);
-            active_ev_io(status);
-            return;
+            set_state(STATE::QUERY_CONT);
+            next_event(status);
+            return false;
         } else {
-            if (ret == OPERATION_SUCCESS) { // query success
-                store_result_start();
-            } else { // query error
-                handle_task_callback();
-            }
+            set_state(STATE::STORE_RESULT_START);
+            return true;
         }
     }
 
-    void Gtid_MySQL_Conn::query_wait(struct ev_loop *loop, ev_io *w, int event) {
-        int ret, status;
-        status = mysql_status(event);
-        status = mysql_real_query_cont(&ret, &m_mysql, status);
-
-        if (status != OPERATION_FINISHED) {
-            // LT mode. it will callback again
-            set_state(STATE::QUERY_WAITING);
-            return;
-        } else {
-            if (ret == OPERATION_SUCCESS) { // query success
-                store_result_start();
-            } else { // query error
-                handle_task_callback();
-            }
-        }
-    }
-
-    void Gtid_MySQL_Conn::exec_start() {
-        if (m_cur_task == nullptr) {
-            return;
-        }
-
-        int ret = 0;
-        int status = mysql_real_query_start(&ret, &m_mysql, m_cur_task->sql.c_str(), m_cur_task->sql.size());
-        if (status != OPERATION_FINISHED) {
-            // continue to watch the events.
-            set_state(STATE::EXECSQL_WAITING);
-            active_ev_io(status);
-        } else {
-            handle_task_callback();
-        }
-    }
-
-    void Gtid_MySQL_Conn::exec_wait(struct ev_loop *loop, ev_io *watcher, int event) {
-        if (m_cur_task == nullptr) {
-            return;
-        }
-
-        int ret = 0;
+    bool Gtid_MySQL_Conn::query_cont(struct ev_loop *loop, ev_io *w, int event) {
         int status = mysql_status(event);
-        status = mysql_real_query_cont(&ret, &m_mysql, status);
+        status = mysql_real_query_cont(&err, &m_mysql, status);
         if (status != OPERATION_FINISHED) {
-            // LT mode. it will callback again
-            set_state(STATE::EXECSQL_WAITING);
+            set_state(STATE::QUERY_CONT);
+            next_event(status);
+            return false;
         } else {
-            handle_task_callback();
+            set_state(STATE::STORE_RESULT_START);
+            return true;
         }
     }
 
-    void Gtid_MySQL_Conn::store_result_start() {
+    bool Gtid_MySQL_Conn::store_result_start() {
         int status = mysql_store_result_start(&m_query_res, &m_mysql);
         if (status != OPERATION_FINISHED) {
-            set_state(STATE::STORE_WAITING);
-            active_ev_io(status);
+            set_state(STATE::STORE_RESULT_CONT);
+            next_event(status);
+            return false;
         } else {
-            handle_task_callback();
+            set_state(STATE::STORE_RESULT_END);
+            return true;
         }
     }
 
-    void Gtid_MySQL_Conn::store_result_wait(struct ev_loop *loop, ev_io *watcher, int event) {
-        if (m_cur_task == nullptr) {
-            return;
-        }
+    bool Gtid_MySQL_Conn::store_result_cont(struct ev_loop *loop, ev_io *watcher, int event) {
         int status = mysql_status(event);
         status = mysql_store_result_cont(&m_query_res, &m_mysql, status);
         if (status != OPERATION_FINISHED) {
-            // LT mode. it will callback again
-            set_state(STATE::STORE_WAITING);
+            set_state(STATE::STORE_RESULT_CONT);
+            next_event(status);
+            return false;
         } else {
-            handle_task_callback();
+            set_state(STATE::STORE_RESULT_END);
+            return true;
         }
     }
 
-    void Gtid_MySQL_Conn::ping_start() {
+    bool Gtid_MySQL_Conn::store_result_end() {
+        if (m_query_res) { // normal
+            handle_callback(m_cur_task);
+            set_state(STATE::QUERY_START);
+            return true;
+        } else { // error
+            return handle_error();
+        }
+    }
+
+    bool Gtid_MySQL_Conn::ping_start() {
         if (m_is_connected) {
-            return;
+            return false;
         }
 
-        int ret, status;
-        status = mysql_ping_start(&ret, &m_mysql);
+        int status = mysql_ping_start(&err, &m_mysql);
         if (status != OPERATION_FINISHED) { // not finished
-            set_state(STATE::PING_WAITING);
-            active_ev_io(status);
-            return;
+            set_state(STATE::PING_CONT);
+            next_event(status);
+            return false;
         } else {
-            if (ret == OPERATION_SUCCESS) { // active
-                connect_ok();
-            } else { // not active
-                // todo error log
-                handle_task_callback();
-            }
+            set_state(STATE::PING_END);
+            return true;
         }
     }
 
-    void Gtid_MySQL_Conn::ping_wait(struct ev_loop *loop, ev_io *w, int event) {
-        int ret = 0;
+    bool Gtid_MySQL_Conn::ping_cont(struct ev_loop *loop, ev_io *w, int event) {
         int status = mysql_status(event);
-        status = mysql_ping_cont(&ret, &m_mysql, status);
-        if (status != OPERATION_FINISHED) {
-            // LT mode. it will callback again
-            set_state(STATE::PING_WAITING);
-            return;
+        status = mysql_ping_cont(&err, &m_mysql, status);
+        if (status != OPERATION_FINISHED) { // not finished
+            set_state(STATE::PING_CONT);
+            next_event(status);
+            return false;
         } else {
-            if (ret == OPERATION_SUCCESS) {
-                if (!m_is_connected) {
-                    connect_ok();
-                    handle_task_callback();
-                }
-            } else {
-                connect_failed();
-                // todo error log
-            }
+            set_state(STATE::PING_END);
+            return true;
         }
     }
 
-    void Gtid_MySQL_Conn::active_ev_io(int mysql_status) {
-        bool old_read = m_reading;
-        bool old_wrie = m_writing;
+
+    bool Gtid_MySQL_Conn::ping_end() {
+        if (err == OPERATION_SUCCESS) {
+            if (!m_is_connected) {
+                connect_ok();
+                handle_error();
+            }
+        } else {
+            connect_failed();
+            // todo error log
+            if (m_reconnect_cnt++ < MAX_DISCONNECT_TIME) {
+                set_state(STATE::CONNECT_START);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    void Gtid_MySQL_Conn::next_event(int mysql_status) {
         int events = event_status(mysql_status);
 
         if (events & EV_READ) { // read event
@@ -362,12 +348,10 @@ namespace gtid_syner {
             ev_io_init(&m_watcher, libev_io_cb, fd, events);
         }
 
-        if (old_read != m_reading || old_wrie != m_writing) { // re-register events for watcher
-            ev_io_stop(m_loop, &m_watcher);
-            ev_io_set(&m_watcher, m_watcher.fd, m_watcher.events | events);
-            ev_io_start(m_loop, &m_watcher);
-            m_watcher.data = this;
-        }
+        ev_io_stop(m_loop, &m_watcher);
+        ev_io_set(&m_watcher, m_watcher.fd, m_watcher.events | events);
+        ev_io_start(m_loop, &m_watcher);
+        m_watcher.data = this;
     }
 
     int Gtid_MySQL_Conn::event_status(int status) {
@@ -405,20 +389,6 @@ namespace gtid_syner {
         return true;
     }
 
-    void Gtid_MySQL_Conn::start_next_task() {
-        SAFE_DELETE(m_cur_task);
-        m_cur_task = fetch_next_task();
-        if (m_cur_task != nullptr) {
-            if (m_cur_task->oper == sql_task_t::OPERATE::SELECT) {
-                query_start();
-            } else {
-                exec_start();
-            }
-        } else {
-            stop_task();
-        }
-    }
-
     void Gtid_MySQL_Conn::stop_task() {
         if (m_loop == nullptr) {
             return;
@@ -430,7 +400,7 @@ namespace gtid_syner {
 
     bool Gtid_MySQL_Conn::wait_next_task(int mysql_status) {
         if (!is_task_empty()) {
-            active_ev_io(mysql_status);
+            next_event(mysql_status);
             return true;
         }
         return false;
@@ -451,47 +421,46 @@ namespace gtid_syner {
         if (m_cur_task != nullptr && m_cur_task->error == 0) {
             SET_ERR_INFO(m_cur_task, -1, "terminated!");
         }
-        callback(m_cur_task);
+        handle_callback(m_cur_task);
         SAFE_DELETE(m_cur_task);
 
         for (auto &it: m_tasks) {
             SET_ERR_INFO(it, -1, "terminated!");
-            callback(it);
+            handle_callback(it);
             SAFE_DELETE(it);
         }
         m_tasks.clear();
     }
 
 
-    void Gtid_MySQL_Conn::handle_task_callback() {
+    bool Gtid_MySQL_Conn::handle_error() {
         int error = mysql_errno(&m_mysql);
         const char *errstr = mysql_error(&m_mysql);
         SET_ERR_INFO(m_cur_task, error, errstr);
-        callback(m_cur_task);
-        if (error == CR_SERVER_LOST || error == CR_SERVER_GONE_ERROR) {
+        handle_callback(m_cur_task);
+        if (error == CR_SERVER_LOST || error == CR_SERVER_GONE_ERROR) { // reconnect error
             connect_failed();
             // todo error log
-            if (m_reconnect_cnt++ == MAX_DISCONNECT_TIME) {
-                clear_tasks();
-            } else {
-                connect_start();
+            if (m_reconnect_cnt++ < MAX_DISCONNECT_TIME) {
+                set_state(STATE::CONNECT_START);
+                return true;
             }
-        } else {
-            if (error != 0) {
-                if (m_cur_task != nullptr) {
-                    // todo error log
-                } else {
-                    // todo error log
-                }
-            }
-            if (m_is_connected) {
-                set_state(STATE::WAIT_TASK);
-                wait_next_task();
-            }
+
+            // over max reconnect count
+            clear_tasks();
+            return false;
         }
+
+        // todo error log
+        if (m_is_connected) {
+            set_state(STATE::QUERY_START);
+            return true;
+        }
+
+        return false;
     }
 
-    void Gtid_MySQL_Conn::callback(sql_task_t *task) {
+    void Gtid_MySQL_Conn::handle_callback(sql_task_t *task) {
         if (task == nullptr) {
             return;
         }
