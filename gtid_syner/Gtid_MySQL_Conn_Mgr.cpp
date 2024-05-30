@@ -5,4 +5,4 @@
 #include "Gtid_MySQL_Conn_Mgr.h"
 
 namespace gtid_syner {
-} // gtid_syner
+} // gtid_sync

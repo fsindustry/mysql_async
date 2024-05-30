@@ -9,7 +9,7 @@
 #include <vector>
 #include <mysql.h>
 
-namespace gtid_syner {
+namespace gtid_sync {
 
     typedef std::unordered_map<std::string, std::string> map_row_t;
     typedef std::vector<map_row_t> vec_row_t;
@@ -62,5 +62,5 @@ namespace gtid_syner {
 
     };
 
-} // gtid_syner
+} // gtid_sync
 #endif //GTIDSYNER_GTID_MYSQL_RESULT_H

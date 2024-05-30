@@ -25,7 +25,7 @@
         x->errstr = (s != nullptr) ? s : ""; \
     }
 
-namespace gtid_syner {
+namespace gtid_sync {
 
     class Gtid_MySQL_Conn;
 
@@ -197,6 +197,6 @@ namespace gtid_syner {
 
     };
 
-} // gtid_syner
+} // gtid_sync
 
 #endif //GTIDSYNER_GTID_MYSQL_CONN_H

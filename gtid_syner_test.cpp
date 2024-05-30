@@ -7,25 +7,25 @@
 #include "gtid_syner/Gtid_MySQL_Conn.h"
 
 
-void mysql_query_cb(const gtid_syner::Gtid_MySQL_Conn *conn,
-               gtid_syner::sql_task_t *task,
-               gtid_syner::Gtid_MySQL_Result *res);
+void mysql_query_cb(const gtid_sync::Gtid_MySQL_Conn *conn,
+                    gtid_sync::sql_task_t *task,
+                    gtid_sync::Gtid_MySQL_Result *res);
 
 void timer_cb(EV_P_ ev_timer *w, int revents) {
-    auto *task = new gtid_syner::sql_task_t;
-    task->oper = gtid_syner::sql_task_t::OPERATE::SELECT;
+    auto *task = new gtid_sync::sql_task_t;
+    task->oper = gtid_sync::sql_task_t::OPERATE::SELECT;
     task->fn_query = mysql_query_cb;
     task->sql = "show master status;";
     task->privdata = w;
 
-    auto *conn = static_cast<gtid_syner::Gtid_MySQL_Conn *>(w->data);
+    auto *conn = static_cast<gtid_sync::Gtid_MySQL_Conn *>(w->data);
     conn->add_task(task);
 }
 
-void mysql_query_cb(const gtid_syner::Gtid_MySQL_Conn *conn,
-               gtid_syner::sql_task_t *task,
-               gtid_syner::Gtid_MySQL_Result *res) {
-    std::vector<gtid_syner::map_row_t> result;
+void mysql_query_cb(const gtid_sync::Gtid_MySQL_Conn *conn,
+                    gtid_sync::sql_task_t *task,
+                    gtid_sync::Gtid_MySQL_Result *res) {
+    std::vector<gtid_sync::map_row_t> result;
     res->result_data(result);
     for (auto &row: result) {
         for (auto &pair: row) {
@@ -43,7 +43,7 @@ void mysql_query_cb(const gtid_syner::Gtid_MySQL_Conn *conn,
 int main(int args, char **argv) {
 
     struct ev_loop *loop = EV_DEFAULT;
-    gtid_syner::db_info_t db_info;
+    gtid_sync::db_info_t db_info;
     db_info.port = 3306;
     db_info.max_conn_cnt = 1;
     db_info.host = "127.0.0.1";
@@ -51,7 +51,7 @@ int main(int args, char **argv) {
     db_info.password = "Huawei@123";
     db_info.db_name = "mysql";
     db_info.charset = "utf8";
-    auto *conn = new gtid_syner::Gtid_MySQL_Conn;
+    auto *conn = new gtid_sync::Gtid_MySQL_Conn;
     conn->init(&db_info, loop);
 
     ev_timer timer;

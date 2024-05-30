@@ -4,7 +4,7 @@
 
 #include "Gtid_MySQL_Result.h"
 
-namespace gtid_syner {
+namespace gtid_sync {
 
     Gtid_MySQL_Result::Gtid_MySQL_Result(MYSQL *mysql, MYSQL_RES *res) {
         init(mysql, res);

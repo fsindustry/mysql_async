@@ -11,6 +11,6 @@ namespace gtid_syner {
 
     };
 
-} // gtid_syner
+} // gtid_sync
 
 #endif //GTIDSYNER_GTID_MYSQL_CONN_MGR_H

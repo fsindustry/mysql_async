@@ -6,7 +6,7 @@
 #include <errmsg.h>
 #include "Gtid_MySQL_Conn.h"
 
-namespace gtid_syner {
+namespace gtid_sync {
 
 
     Gtid_MySQL_Conn::Gtid_MySQL_Conn() {
@@ -484,4 +484,4 @@ namespace gtid_syner {
     struct ev_loop *Gtid_MySQL_Conn::get_loop() const {
         return m_loop;
     }
-} // gtid_syner
+} // gtid_sync
