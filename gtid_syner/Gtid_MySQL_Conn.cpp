@@ -26,7 +26,7 @@ namespace gtid_syner {
         }
 
         bool reconnect = true;
-        unsigned int timeout = 3;
+        unsigned int timeout = 3600;
         mysql_init(&m_mysql);
         mysql_options(&m_mysql, MYSQL_OPT_NONBLOCK, 0);  // set async.
         mysql_options(&m_mysql, MYSQL_OPT_CONNECT_TIMEOUT, reinterpret_cast<char *>(&timeout));
