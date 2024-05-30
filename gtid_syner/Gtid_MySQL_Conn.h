@@ -47,8 +47,6 @@ namespace gtid_sync {
 
     typedef void(*mysql_query_cb)(const Gtid_MySQL_Conn *, sql_task_t *task, Gtid_MySQL_Result *res);
 
-    typedef void(*conn_task_timer_cb)(const Gtid_MySQL_Conn *, sql_task_t *task, Gtid_MySQL_Result *res);
-
     typedef struct sql_task_s {
         enum class OPERATE {
             SELECT,
@@ -88,7 +86,7 @@ namespace gtid_sync {
 
         bool add_task(sql_task_t *task);
 
-        bool init_task_timer(conn_task_timer_cb cb, sql_task_t *task, double interval, double repeat);
+        bool init_task_timer(sql_task_t *task, double interval, double repeat);
 
         bool is_connected() const { return m_is_connected; }
 
@@ -189,7 +187,6 @@ namespace gtid_sync {
 
         sql_task_t *m_timer_task = nullptr;
         double m_task_timer_interval = 0;
-        conn_task_timer_cb timer_cb = nullptr;
 
         MYSQL m_mysql;
         MYSQL_RES *m_query_res = nullptr;

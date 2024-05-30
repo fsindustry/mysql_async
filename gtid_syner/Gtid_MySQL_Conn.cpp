@@ -91,13 +91,12 @@ namespace gtid_sync {
     /**
      * add ev timer to check connection
      */
-    bool Gtid_MySQL_Conn::init_task_timer(conn_task_timer_cb cb, sql_task_t *task, double after, double interval) {
+    bool Gtid_MySQL_Conn::init_task_timer(sql_task_t *task, double after, double interval) {
         if (m_loop == nullptr) {
             return false;
         }
 
         m_task_timer_interval = interval;
-        timer_cb = cb;
         m_timer_task = task;
         ev_timer_init(&m_task_timer, task_timer_cb, after, 0);
         m_task_timer.data = this;
