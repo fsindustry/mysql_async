@@ -2,8 +2,8 @@
 // Created by fsindustry on 5/27/24.
 //
 
-#ifndef GTIDSYNER_GTID_MYSQL_CONN_H
-#define GTIDSYNER_GTID_MYSQL_CONN_H
+#ifndef GTIDSYNC_GTID_MYSQL_CONN_H
+#define GTIDSYNC_GTID_MYSQL_CONN_H
 
 #include <string>
 #include <ev.h>
@@ -195,4 +195,4 @@ namespace gtid_sync {
 
 } // gtid_sync
 
-#endif //GTIDSYNER_GTID_MYSQL_CONN_H
+#endif //GTIDSYNC_GTID_MYSQL_CONN_H

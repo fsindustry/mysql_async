@@ -2,8 +2,8 @@
 // Created by fsindustry on 5/27/24.
 //
 
-#ifndef GTIDSYNER_GTID_MYSQL_RESULT_H
-#define GTIDSYNER_GTID_MYSQL_RESULT_H
+#ifndef GTIDSYNC_GTID_MYSQL_RESULT_H
+#define GTIDSYNC_GTID_MYSQL_RESULT_H
 
 #include <unordered_map>
 #include <vector>
@@ -63,4 +63,4 @@ namespace gtid_sync {
     };
 
 } // gtid_sync
-#endif //GTIDSYNER_GTID_MYSQL_RESULT_H
+#endif //GTIDSYNC_GTID_MYSQL_RESULT_H
