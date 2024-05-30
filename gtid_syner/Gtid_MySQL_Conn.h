@@ -107,7 +107,7 @@ namespace gtid_sync {
         /**
          * ping timer handle_callback
          */
-        static void ping_timer_cb(struct ev_loop *loop, ev_timer *w, int revents);
+        static void ping_timer_cb(struct ev_loop *loop, ev_timer *w, int events);
 
         /**
          * io handle_callback
@@ -117,7 +117,7 @@ namespace gtid_sync {
         /**
          * state machine to handle mysql async api
          */
-        void state_machine_handler(struct ev_loop *loop, ev_io *w, int event);
+        void state_machine_handler(int event);
 
         void next_event(int mysql_status);
 
@@ -130,27 +130,23 @@ namespace gtid_sync {
 
         bool connect_start();
 
-        bool connect_cont(struct ev_loop *loop, ev_io *watcher, int event);
+        bool connect_cont(int event);
 
         bool connect_end();
 
         bool query_start();
 
-        bool query_cont(struct ev_loop *loop, ev_io *w, int event);
-
-        bool exec_start();
-
-        void exec_wait(struct ev_loop *loop, ev_io *w, int event);
+        bool query_cont(int event);
 
         bool store_result_start();
 
-        bool store_result_cont(struct ev_loop *loop, ev_io *watcher, int event);
+        bool store_result_cont(int event);
 
         bool store_result_end();
 
         bool ping_start();
 
-        bool ping_cont(struct ev_loop *loop, ev_io *w, int event);
+        bool ping_cont(int event);
 
         bool ping_end();
 

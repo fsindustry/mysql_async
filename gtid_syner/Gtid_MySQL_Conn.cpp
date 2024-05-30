@@ -35,7 +35,8 @@ namespace gtid_sync {
         mysql_options(&m_mysql, MYSQL_OPT_RECONNECT, reinterpret_cast<char *>(&reconnect));
 
         m_loop = loop;
-        connect_start();
+        set_state(STATE::CONNECT_START);
+        state_machine_handler(EV_WRITE);
         load_timer();
         return true;
     }
@@ -79,7 +80,7 @@ namespace gtid_sync {
             return false;
         }
         // todo config ping time interval
-        ev_timer_init(&m_timer, ping_timer_cb, 1.0, 1.0);
+        ev_timer_init(&m_timer, ping_timer_cb, 1.0, 0);
         ev_timer_start(m_loop, &m_timer);
         m_timer.data = this;
         return true;
@@ -88,9 +89,14 @@ namespace gtid_sync {
     /**
      * ping timer handle_callback
      */
-    void Gtid_MySQL_Conn::ping_timer_cb(struct ev_loop *loop, ev_timer *w, int revents) {
+    void Gtid_MySQL_Conn::ping_timer_cb(struct ev_loop *loop, ev_timer *w, int event) {
         Gtid_MySQL_Conn *c = static_cast<Gtid_MySQL_Conn *>(w->data);
         c->ping_start();
+
+        // todo set ping timeout args
+        ev_timer_stop(loop, w);
+        ev_timer_init(w, ping_timer_cb, 1.0, 0);
+        ev_timer_start(loop, w);
     }
 
     /**
@@ -98,13 +104,13 @@ namespace gtid_sync {
      */
     void Gtid_MySQL_Conn::libev_io_cb(struct ev_loop *loop, ev_io *w, int event) {
         Gtid_MySQL_Conn *c = static_cast<Gtid_MySQL_Conn *>(w->data);
-        c->state_machine_handler(loop, w, event);
+        c->state_machine_handler(event);
     }
 
     /**
      * state machine to handle mysql async api
      */
-    void Gtid_MySQL_Conn::state_machine_handler(struct ev_loop *loop, ev_io *w, int event) {
+    void Gtid_MySQL_Conn::state_machine_handler(int event) {
         again: // quick start next loop
         switch (m_state) {
             case STATE::CONNECT_START:
@@ -113,7 +119,7 @@ namespace gtid_sync {
                 }
                 break;
             case STATE::CONNECT_CONT:
-                if (connect_cont(loop, w, event)) {
+                if (connect_cont(event)) {
                     goto again;
                 }
                 break;
@@ -128,7 +134,7 @@ namespace gtid_sync {
                 }
                 break;
             case STATE::QUERY_CONT:
-                if (query_cont(loop, w, event)) {
+                if (query_cont(event)) {
                     goto again;
                 }
                 break;
@@ -138,7 +144,7 @@ namespace gtid_sync {
                 }
                 break;
             case STATE::STORE_RESULT_CONT:
-                if (store_result_cont(loop, w, event)) {
+                if (store_result_cont(event)) {
                     goto again;
                 }
                 break;
@@ -153,7 +159,7 @@ namespace gtid_sync {
                 }
                 break;
             case STATE::PING_CONT:
-                if (ping_cont(loop, w, event)) {
+                if (ping_cont(event)) {
                     goto again;
                 }
                 break;
@@ -185,7 +191,7 @@ namespace gtid_sync {
         }
     }
 
-    bool Gtid_MySQL_Conn::connect_cont(struct ev_loop *loop, ev_io *watcher, int event) {
+    bool Gtid_MySQL_Conn::connect_cont(int event) {
         int status = mysql_status(event);
         status = mysql_real_connect_cont(&ret, &m_mysql, status);
         if (status != OPERATION_FINISHED) {
@@ -232,7 +238,7 @@ namespace gtid_sync {
         }
     }
 
-    bool Gtid_MySQL_Conn::query_cont(struct ev_loop *loop, ev_io *w, int event) {
+    bool Gtid_MySQL_Conn::query_cont(int event) {
         int status = mysql_status(event);
         status = mysql_real_query_cont(&err, &m_mysql, status);
         if (status != OPERATION_FINISHED) {
@@ -257,7 +263,7 @@ namespace gtid_sync {
         }
     }
 
-    bool Gtid_MySQL_Conn::store_result_cont(struct ev_loop *loop, ev_io *watcher, int event) {
+    bool Gtid_MySQL_Conn::store_result_cont(int event) {
         int status = mysql_status(event);
         status = mysql_store_result_cont(&m_query_res, &m_mysql, status);
         if (status != OPERATION_FINISHED) {
@@ -296,7 +302,7 @@ namespace gtid_sync {
         }
     }
 
-    bool Gtid_MySQL_Conn::ping_cont(struct ev_loop *loop, ev_io *w, int event) {
+    bool Gtid_MySQL_Conn::ping_cont(int event) {
         int status = mysql_status(event);
         status = mysql_ping_cont(&err, &m_mysql, status);
         if (status != OPERATION_FINISHED) { // not finished
