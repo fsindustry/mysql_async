@@ -58,7 +58,7 @@ int main(int args, char **argv) {
     task->oper = gtid_sync::sql_task_t::OPERATE::SELECT;
     task->fn_query = mysql_query_cb;
     task->sql = "show master status;";
-    conn->init_task_timer(mysql_query_cb, task, 3, 3);
+    conn->init_task_timer(task, 3, 3);
 
 //    ev_timer timer;
 //    timer.data = conn;
