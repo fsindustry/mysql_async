@@ -33,10 +33,10 @@ void mysql_query_cb(const gtid_sync::Gtid_MySQL_Conn *conn,
         }
     }
 
-    struct ev_timer *timer = static_cast<struct ev_timer *>(task->privdata);
-    ev_timer_stop(conn->get_loop(), timer);
-    ev_timer_init(timer, timer_cb, 3.0, 0.0);
-    ev_timer_start(conn->get_loop(), timer);
+//    struct ev_timer *timer = static_cast<struct ev_timer *>(task->privdata);
+//    ev_timer_stop(conn->get_loop(), timer);
+//    ev_timer_init(timer, timer_cb, 3.0, 0.0);
+//    ev_timer_start(conn->get_loop(), timer);
 }
 
 
@@ -54,10 +54,16 @@ int main(int args, char **argv) {
     auto *conn = new gtid_sync::Gtid_MySQL_Conn;
     conn->init(&db_info, loop);
 
-    ev_timer timer;
-    timer.data = conn;
-    ev_timer_init(&timer, timer_cb, 3.0, 0.0);
-    ev_timer_start(loop, &timer);
+    auto *task = new gtid_sync::sql_task_t;
+    task->oper = gtid_sync::sql_task_t::OPERATE::SELECT;
+    task->fn_query = mysql_query_cb;
+    task->sql = "show master status;";
+    conn->init_task_timer(mysql_query_cb, task, 3, 3);
+
+//    ev_timer timer;
+//    timer.data = conn;
+//    ev_timer_init(&timer, timer_cb, 3.0, 0.0);
+//    ev_timer_start(loop, &timer);
 
     ev_run(loop, 0);
 }

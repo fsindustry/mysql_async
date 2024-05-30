@@ -10,13 +10,15 @@ namespace gtid_sync {
 
 
     Gtid_MySQL_Conn::Gtid_MySQL_Conn() {
-        memset(&m_timer, 0, sizeof(m_timer));
+        memset(&m_ping_timer, 0, sizeof(m_ping_timer));
+        memset(&m_task_timer, 0, sizeof(m_task_timer));
         memset(&m_watcher, 0, sizeof(m_watcher));
     }
 
     Gtid_MySQL_Conn::~Gtid_MySQL_Conn() {
         clear_tasks();
         SAFE_DELETE(m_db_info);
+        SAFE_DELETE(m_timer_task);
     }
 
 
@@ -37,7 +39,7 @@ namespace gtid_sync {
         m_loop = loop;
         set_state(STATE::CONNECT_START);
         state_machine_handler(EV_WRITE);
-        load_timer();
+        // init_ping_timer();
         return true;
     }
 
@@ -75,14 +77,31 @@ namespace gtid_sync {
     /**
      * add ev timer to check connection
      */
-    bool Gtid_MySQL_Conn::load_timer() {
+    bool Gtid_MySQL_Conn::init_ping_timer() {
         if (m_loop == nullptr) {
             return false;
         }
         // todo config ping time interval
-        ev_timer_init(&m_timer, ping_timer_cb, 1.0, 0);
-        ev_timer_start(m_loop, &m_timer);
-        m_timer.data = this;
+        ev_timer_init(&m_ping_timer, ping_timer_cb, 1.0, 0);
+        ev_timer_start(m_loop, &m_ping_timer);
+        m_ping_timer.data = this;
+        return true;
+    }
+
+    /**
+     * add ev timer to check connection
+     */
+    bool Gtid_MySQL_Conn::init_task_timer(conn_task_timer_cb cb, sql_task_t *task, double after, double interval) {
+        if (m_loop == nullptr) {
+            return false;
+        }
+
+        m_task_timer_interval = interval;
+        timer_cb = cb;
+        m_timer_task = task;
+        ev_timer_init(&m_task_timer, task_timer_cb, after, 0);
+        m_task_timer.data = this;
+        ev_timer_start(m_loop, &m_task_timer);
         return true;
     }
 
@@ -96,6 +115,24 @@ namespace gtid_sync {
         // todo set ping timeout args
         ev_timer_stop(loop, w);
         ev_timer_init(w, ping_timer_cb, 1.0, 0);
+        ev_timer_start(loop, w);
+    }
+
+    /**
+     * task timer handle_callback
+     */
+    void Gtid_MySQL_Conn::task_timer_cb(struct ev_loop *loop, ev_timer *w, int events) {
+        Gtid_MySQL_Conn *c = static_cast<Gtid_MySQL_Conn *>(w->data);
+
+        sql_task_t* new_task = new sql_task_t;
+        new_task->oper = c->m_timer_task->oper;
+        new_task->fn_query = c->m_timer_task->fn_query;
+        new_task->sql = c->m_timer_task->sql;
+        new_task->privdata = c->m_timer_task->privdata;
+        c->add_task(new_task);
+
+        ev_timer_stop(loop, w);
+        ev_timer_set(w, c->m_task_timer_interval, 0);
         ev_timer_start(loop, w);
     }
 
@@ -336,19 +373,6 @@ namespace gtid_sync {
 
     void Gtid_MySQL_Conn::next_event(int mysql_status) {
         int events = event_status(mysql_status);
-
-        if (events & EV_READ) { // read event
-            if (!m_reading) {
-                m_reading = true;
-            }
-        }
-
-        if (events & EV_WRITE) { // write event
-            if (!m_writing) {
-                m_writing = true;
-            }
-        }
-
         if (!ev_is_active(&m_watcher)) { // initial watcher
             int fd = mysql_get_socket(&m_mysql);
             ev_io_init(&m_watcher, libev_io_cb, fd, events);
@@ -490,4 +514,5 @@ namespace gtid_sync {
     struct ev_loop *Gtid_MySQL_Conn::get_loop() const {
         return m_loop;
     }
+
 } // gtid_sync

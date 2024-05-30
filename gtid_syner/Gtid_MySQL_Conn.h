@@ -47,6 +47,8 @@ namespace gtid_sync {
 
     typedef void(*mysql_query_cb)(const Gtid_MySQL_Conn *, sql_task_t *task, Gtid_MySQL_Result *res);
 
+    typedef void(*conn_task_timer_cb)(const Gtid_MySQL_Conn *, sql_task_t *task, Gtid_MySQL_Result *res);
+
     typedef struct sql_task_s {
         enum class OPERATE {
             SELECT,
@@ -86,7 +88,11 @@ namespace gtid_sync {
 
         bool add_task(sql_task_t *task);
 
+        bool init_task_timer(conn_task_timer_cb cb, sql_task_t *task, double interval, double repeat);
+
         bool is_connected() const { return m_is_connected; }
+
+        struct ev_loop *get_loop() const;
 
     private:
         bool set_db_info(const db_info_t *db_info);
@@ -102,12 +108,17 @@ namespace gtid_sync {
         /**
          * add ev timer to check connection
          */
-        bool load_timer();
+        bool init_ping_timer();
 
         /**
          * ping timer handle_callback
          */
         static void ping_timer_cb(struct ev_loop *loop, ev_timer *w, int events);
+
+        /**
+         * task timer handle_callback
+         */
+        static void task_timer_cb(struct ev_loop *loop, ev_timer *w, int events);
 
         /**
          * io handle_callback
@@ -168,18 +179,17 @@ namespace gtid_sync {
     private:
 
         ev_io m_watcher;
-        ev_timer m_timer;
-        bool m_reading = false;
-        bool m_writing = false;
+        ev_timer m_ping_timer;
+        ev_timer m_task_timer;
         struct ev_loop *m_loop = nullptr;
-    public:
-        struct ev_loop *get_loop() const;
-
-    private:
 
         bool m_is_connected = true;
         int m_reconnect_cnt = 0;
         db_info_t *m_db_info = nullptr;
+
+        sql_task_t *m_timer_task = nullptr;
+        double m_task_timer_interval = 0;
+        conn_task_timer_cb timer_cb = nullptr;
 
         MYSQL m_mysql;
         MYSQL_RES *m_query_res = nullptr;
@@ -190,7 +200,6 @@ namespace gtid_sync {
 
         std::list<sql_task_t *> m_tasks;
         sql_task_t *m_cur_task = nullptr;
-
     };
 
 } // gtid_sync
