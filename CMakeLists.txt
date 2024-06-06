@@ -41,12 +41,7 @@ set(GTID_TEST_SOURCES gtid_syner_test.cpp
         gtid_syner/Gtid_MySQL_Result.cpp
         gtid_syner/Gtid_MySQL_Result.h
         gtid_syner/Gtid_MySQL_Conn.h
-        gtid_syner/Gtid_MySQL_Conn.cpp
-        gtid_syner/Gtid_MySQL_Conn.h
-        gtid_syner/Gtid_MySQL_Conn.cpp
-        gtid_syner/Gtid_MySQL_Conn.h
-        gtid_syner/Gtid_MySQL_Conn_Mgr.cpp
-        gtid_syner/Gtid_MySQL_Conn_Mgr.h)
+        gtid_syner/Gtid_MySQL_Conn.cpp)
 
 # 添加可执行文件
 add_executable(gtid_syner_test ${GTID_TEST_SOURCES})
